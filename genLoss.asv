@@ -1,0 +1,81 @@
+function [J,grad] = genLoss(discParams,genParams,discHiddenSize,genHiddenSize, ...
+                            discInputSize,genInputSize,noise)
+%GENLOSS is the objective function for the generator
+%  non saturating
+%this has to be maximised rather than minimised
+m_fake = length(noise);
+J = 0;
+fake = genForward(genParams,genInputSize,discInputSize,genHiddenSize,noise);
+h_fake = discForward(discParams,discInputSize,discHiddenSize,fake);
+
+for i = 1:m_fake
+    J = J + log(h_fake(i))/m_fake;
+   
+end
+
+J = J*(-1);
+
+
+theta1_gen = reshape(genParams(1:genHiddenSize*2),genHiddenSize,2);
+theta2_gen = reshape(genParams(1+genHiddenSize*2:end),discInputSize,genHiddenSize+1);
+theta1 = reshape(discParams(1:discHiddenSize*(discInputSize+1)),discHiddenSize,discInputSize+1);
+theta2 = reshape(discParams(discHiddenSize*(discInputSize+1)+1:end),1,discHiddenSize+1);
+theta1_gen_grad = zeros(size(theta1_gen));
+theta2_gen_grad = zeros(size(theta2_gen));
+
+m_fake = length(noise);
+%genforward
+noise = [ones(m_fake,1) noise];
+z2_gen = (theta1_gen*noise')'; 
+a2_gen = sigmoid(z2_gen);
+a2_gen = [ones(m_fake,1) a2_gen];
+z3_gen = (theta2_gen*a2_gen')';
+a3_gen = sigmoid(z3_gen);  
+
+fake = a3_gen;
+
+%disc fp on fake examples to proceed with bp 
+fake = [ones(m_fake,1) fake]; 
+
+z2 = (theta1*fake')';
+a2 = sigmoid(z2);
+a2 = [ones(m_fake,1) a2];
+z3 = (theta2*a2')';
+a3 = sigmoid(z3);
+
+
+
+
+
+
+z2 = [ones(m_fake,1) z2];
+z2_gen = [ones(m_fake,1) z2_gen];
+
+deltamain1_gen = zeros(size(theta1_gen_grad));
+deltamain2_gen = zeros(size(theta2_gen_grad));
+
+
+
+
+for i=1:m_fake
+    delta3 = a3(i)-1;
+    delta2= (theta2')*delta3.*sigmoidGradient(z2(i,:)');
+    delta2 = delta2(2:end);
+    delta_fake = (theta1')*delta2.*sigmoidGradient(fake(i,:)');
+    delta_fake = delta_fake(2:end);
+    delta2_gen = (theta2_gen')*delta_fake.*sigmoidGradient(z2_gen(i,:)');
+    delta2_gen = delta2_gen(2:end);
+    deltamain2_gen=deltamain2_gen+delta_fake*a2_gen(i,:);
+    deltamain1_gen=deltamain1_gen+delta2_gen*noise(i,:);
+end
+
+theta1_gen_grad = deltamain1_gen/m_fake;
+theta2_gen_grad = deltamain2_gen/m_fake;
+
+theta1_gen_grad(:,2:end) = theta1_gen_grad(:,2:end) + lambda*theta1_gen(:,2:end)/m_fake;
+theta2_gen_grad(:,2:end) = theta2_gen_grad(:,2:end) + lambda*theta2_gen(:,2:end)/m_fake;
+
+grad = [theta1_gen_grad(:) ; theta2_gen_grad(:)];
+
+end
+
